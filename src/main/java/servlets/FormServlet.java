@@ -1,5 +1,6 @@
 package servlets;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.text.DecimalFormat;
 
@@ -7,6 +8,21 @@ import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
+import com.itextpdf.text.Document;
+import com.itextpdf.text.DocumentException;
+import com.itextpdf.text.pdf.PdfPTable;
+import com.itextpdf.text.pdf.PdfWriter;
+import com.itextpdf.tool.xml.ElementList;
+import com.itextpdf.tool.xml.XMLWorker;
+import com.itextpdf.tool.xml.css.StyleAttrCSSResolver;
+import com.itextpdf.tool.xml.html.Tags;
+import com.itextpdf.tool.xml.parser.XMLParser;
+import com.itextpdf.tool.xml.pipeline.css.CSSResolver;
+import com.itextpdf.tool.xml.pipeline.css.CssResolverPipeline;
+import com.itextpdf.tool.xml.pipeline.end.ElementHandlerPipeline;
+import com.itextpdf.tool.xml.pipeline.html.HtmlPipeline;
+import com.itextpdf.tool.xml.pipeline.html.HtmlPipelineContext;
 
 @WebServlet("/loan")
 public class FormServlet extends HttpServlet {
@@ -16,35 +32,82 @@ public class FormServlet extends HttpServlet {
 	 */
 	private static final long serialVersionUID = 1L;
 	private static final DecimalFormat f = new DecimalFormat("#0.00");
+	private StringBuilder sb;
 
 	public void doPost(HttpServletRequest request, HttpServletResponse response) throws IOException {
+		this.sb = new StringBuilder();
+
 		String amountStr = request.getParameter("amount");
 		String numberOfInstalmentsStr = request.getParameter("numberOfInstalments");
 		String interestRateStr = request.getParameter("interestRate");
 		String constantDueStr = request.getParameter("constantDue");
 		String typeOfLoan = request.getParameter("typeOfLoan");
+		String generatePdf = request.getParameter("generatePdf");
 
 		if (fieldsEmpty(amountStr, numberOfInstalmentsStr, interestRateStr, constantDueStr, typeOfLoan)) {
 			response.sendRedirect("/");
 		}
+
 		int amount = Integer.parseInt(amountStr);
 		int numberOfInstalments = Integer.parseInt(numberOfInstalmentsStr);
 		double interestRate = Double.parseDouble(interestRateStr);
 		double constantDue = Double.parseDouble(constantDueStr);
 
 		response.setContentType("text/html");
-//		if (typeOfLoan.equals("descType")) {
-//			for (int i = 1; i <= numberOfInstalments; i++) {
-//			}
-//		}
+
 		drawTable(amount, numberOfInstalments, interestRate, constantDue, typeOfLoan, response);
 
+		if (generatePdf == null) {
+			response.getWriter().println(sb.toString());
+		} else {
+			this.generatePDF(response);
+		}
+	}
+
+	private void generatePDF(HttpServletResponse response) throws IOException {
+		response.setContentType("application/pdf");
+
+		try {
+			// step 1
+			Document document = new Document();
+			// step 2
+			PdfWriter.getInstance(document, response.getOutputStream());
+			// step 3
+			document.open();
+			// step 4
+
+			CSSResolver cssResolver = new StyleAttrCSSResolver();
+
+			// HTML
+			HtmlPipelineContext htmlContext = new HtmlPipelineContext(null);
+			htmlContext.setTagFactory(Tags.getHtmlTagProcessorFactory());
+
+			// Pipelines
+			ElementList elements = new ElementList();
+			ElementHandlerPipeline pdf = new ElementHandlerPipeline(elements, null);
+			HtmlPipeline html = new HtmlPipeline(htmlContext, pdf);
+			CssResolverPipeline css = new CssResolverPipeline(cssResolver, html);
+
+			// XML Worker
+			XMLWorker worker = new XMLWorker(css, true);
+			XMLParser p = new XMLParser(worker);
+			p.parse(new ByteArrayInputStream(this.sb.toString().getBytes()));
+			PdfPTable pdfTable = (PdfPTable) elements.get(0);
+
+			document.add(pdfTable);
+
+			// step 5
+			document.close();
+		} catch (DocumentException de) {
+			throw new IOException(de.getMessage());
+		}
 	}
 
 	private boolean fieldsEmpty(String amountStr, String numberOfInstalmentsStr, String interestRateStr,
 			String constantDueStr, String typeOfLoan) {
-		return amountStr.isEmpty() || numberOfInstalmentsStr.isEmpty() || interestRateStr.isEmpty()
-				|| constantDueStr.isEmpty() || typeOfLoan.isEmpty();
+		return amountStr.equals("") || amountStr == null || numberOfInstalmentsStr.equals("")
+				|| numberOfInstalmentsStr == null || interestRateStr.equals("") || interestRateStr == null
+				|| constantDueStr.equals("") || constantDueStr == null || typeOfLoan.equals("") || typeOfLoan == null;
 	}
 
 	private double calcCapitalPartOfDescRate(int amount, int numberOfInstalments) {
@@ -68,14 +131,14 @@ public class FormServlet extends HttpServlet {
 
 	private void drawRow(int i, double constantDue, HttpServletResponse response, double capitalPart,
 			double interestPart, double rateSum) throws IOException {
-		response.getWriter()
-				.println("<tr><td>" + i + "</td><td>" + f.format(capitalPart) + "</td><td>" + f.format(interestPart)
-						+ "</td><td>" + f.format(constantDue) + "</td><td>" + f.format(rateSum) + "</td></tr>");
+		this.sb.append("<tr><td>").append(i).append("</td><td>").append(f.format(capitalPart)).append("</td><td>")
+				.append(f.format(interestPart)).append("</td><td>").append(f.format(constantDue)).append("</td><td>")
+				.append(f.format(rateSum)).append("</td></tr>");
 	}
 
 	private void drawTable(int amount, int numberOfInstalments, double interestRate, double constantDue,
 			String typeOfLoan, HttpServletResponse response) throws IOException {
-		response.getWriter().println(
+		this.sb.append(
 				"<table border=1><tr><th>Nr raty</th><th>Kwota Kapita³u</th><th>Kwota Odsetek</th><th>Op³aty sta³e</th><th>Ca³kowita kwota raty</th></tr>");
 		double capitalPart = 0;
 		double interestPart = 0;
@@ -100,6 +163,7 @@ public class FormServlet extends HttpServlet {
 
 			drawRow(i + 1, constantDue, response, capitalPart, interestPart, rateSum);
 		}
-		response.getWriter().println("</table>");
+		this.sb.append("</table>");
 	}
+
 }
