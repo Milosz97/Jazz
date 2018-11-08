@@ -139,7 +139,7 @@ public class FormServlet extends HttpServlet {
 	private void drawTable(int amount, int numberOfInstalments, double interestRate, double constantDue,
 			String typeOfLoan, HttpServletResponse response) throws IOException {
 		this.sb.append(
-				"<table border=1><tr><th>Nr raty</th><th>Kwota Kapita³u</th><th>Kwota Odsetek</th><th>Op³aty sta³e</th><th>Ca³kowita kwota raty</th></tr>");
+				"<table border=1><tr><th>Nr raty</th><th>Kwota KapitaÂ³u</th><th>Kwota Odsetek</th><th>OpÂ³aty staÂ³e</th><th>CaÂ³kowita kwota raty</th></tr>");
 		double capitalPart = 0;
 		double interestPart = 0;
 		double rateSum = 0;
